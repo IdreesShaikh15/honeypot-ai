@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Security
+from fastapi import FastAPI, Security, HTTPException
 from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel
 from typing import Optional, Union
@@ -9,10 +9,14 @@ from termination.termination_logic import should_terminate
 from callback.guvi_callback import send_final_result
 from conversation.reply_generator import get_human_reply
 
+
 app = FastAPI()
 
+
 # ---------------- API KEY ----------------
+
 API_KEY = "lushlife"
+
 api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
 
 
@@ -22,6 +26,7 @@ def verify_api_key(api_key: str = Security(api_key_header)):
 
 
 # ---------------- REQUEST MODELS ----------------
+
 class MessageModel(BaseModel):
     text: Optional[str] = None
 
@@ -33,6 +38,7 @@ class HoneypotRequest(BaseModel):
 
 
 # ---------------- RESPONSE MODEL ----------------
+
 class HoneypotResponse(BaseModel):
     status: str
     reply: Optional[str] = None
@@ -40,6 +46,7 @@ class HoneypotResponse(BaseModel):
 
 
 # ---------------- ENDPOINT ----------------
+
 @app.post("/honeypot/message", response_model=HoneypotResponse)
 async def honeypot_message(
     payload: HoneypotRequest,
@@ -47,61 +54,67 @@ async def honeypot_message(
 ):
     verify_api_key(api_key)
 
-    # ✅ GUVI Validation Ping
-    if payload.processId:
+    try:
+        # ✅ GUVI VALIDATION PING
+        if payload.processId:
+            return HoneypotResponse(
+                status="success",
+                processId=payload.processId
+            )
+
+        session_id = payload.sessionId or "default-session"
+        message_text = ""
+
+        if isinstance(payload.message, MessageModel):
+            message_text = payload.message.text or ""
+        elif isinstance(payload.message, str):
+            message_text = payload.message
+
+        if not message_text:
+            return HoneypotResponse(
+                status="success",
+                reply="Could you please repeat that message?"
+            )
+
+        session = get_session(session_id)
+
+        # Reset terminated session
+        if session.get("terminated"):
+            session["terminated"] = False
+            session["messages"].clear()
+            session["total_messages"] = 0
+            session["scam_detected"] = False
+            session["intelligence"] = {
+                "upiIds": [],
+                "phoneNumbers": [],
+                "phishingLinks": [],
+                "suspiciousKeywords": []
+            }
+
+        session["messages"].append(message_text)
+        session["total_messages"] += 1
+
+        if not session["scam_detected"]:
+            session["scam_detected"] = analyze_keywords(message_text, session)
+
+        reply = get_human_reply(session)
+
+        if session["scam_detected"] and should_terminate(session):
+            session["terminated"] = True
+            send_final_result(session_id, session)
+
+            return HoneypotResponse(
+                status="success",
+                reply="I will check this and get back to you. Thank you."
+            )
+
         return HoneypotResponse(
             status="success",
-            processId=payload.processId
+            reply=reply
         )
 
-    session_id = payload.sessionId or "default-session"
-
-    message_text = ""
-
-    if isinstance(payload.message, MessageModel):
-        message_text = payload.message.text or ""
-
-    elif isinstance(payload.message, str):
-        message_text = payload.message
-
-    if not message_text:
+    except Exception:
         return HoneypotResponse(
             status="success",
-            reply="Could you please repeat that message?"
+            reply="Unable to process message."
         )
-
-    session = get_session(session_id)
-
-    if session.get("terminated"):
-        session["terminated"] = False
-        session["messages"].clear()
-        session["total_messages"] = 0
-        session["scam_detected"] = False
-        session["intelligence"] = {
-            "upiIds": [],
-            "phoneNumbers": [],
-            "phishingLinks": [],
-            "suspiciousKeywords": []
-        }
-
-    session["messages"].append(message_text)
-    session["total_messages"] += 1
-
-    if not session["scam_detected"]:
-        session["scam_detected"] = analyze_keywords(message_text, session)
-
-    reply = get_human_reply(session)
-
-    if session["scam_detected"] and should_terminate(session):
-        session["terminated"] = True
-        send_final_result(session_id, session)
-
-        return HoneypotResponse(
-            status="success",
-            reply="I will check this and get back to you. Thank you."
-        )
-
-    return HoneypotResponse(
-        status="success",
-        reply=reply
-    )gir 
