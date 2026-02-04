@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Security, HTTPException, Body
+from fastapi import FastAPI, Security, HTTPException
 from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel
 from typing import Optional, Union
@@ -11,17 +11,16 @@ from conversation.reply_generator import get_human_reply
 
 app = FastAPI()
 
-# ---------------- API KEY ----------------
 API_KEY = "lushlife"
 api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
 
 
-def verify_api_key(api_key: str):
+def verify_api_key(api_key: str = Security(api_key_header)):
     if api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
-# ---------------- REQUEST MODELS ----------------
+# ---------- REQUEST MODELS ----------
 class MessageModel(BaseModel):
     text: Optional[str] = None
 
@@ -32,18 +31,27 @@ class HoneypotRequest(BaseModel):
     message: Optional[Union[MessageModel, str]] = None
 
 
-# ---------------- ENDPOINT ----------------
+# ---------- ENDPOINT ----------
 @app.post("/honeypot/message")
 async def honeypot_message(
-    payload: HoneypotRequest = Body(...),   # ⭐ THIS FIXES SWAGGER + GUVI
+    payload: HoneypotRequest,
     api_key: str = Security(api_key_header)
 ):
 
-    # ✅ AUTH
     verify_api_key(api_key)
 
-    # ✅ GUVI VALIDATION PING (MUST BE FIRST RETURN)
+    # ⭐ GUVI VALIDATION HANDSHAKE
     if payload.processId:
+
+        send_final_result(
+            payload.processId,
+            {
+                "scam_detected": False,
+                "total_messages": 0,
+                "intelligence": {}
+            }
+        )
+
         return {
             "status": "success",
             "processId": payload.processId
@@ -52,7 +60,6 @@ async def honeypot_message(
     try:
         session_id = payload.sessionId or "default-session"
 
-        # ---------- Extract Message ----------
         message_text = ""
 
         if isinstance(payload.message, MessageModel):
@@ -61,7 +68,6 @@ async def honeypot_message(
         elif isinstance(payload.message, str):
             message_text = payload.message
 
-        # ---------- Empty Message ----------
         if not message_text:
             return {
                 "status": "success",
@@ -70,7 +76,6 @@ async def honeypot_message(
 
         session = get_session(session_id)
 
-        # ---------- Reset Terminated Session ----------
         if session.get("terminated"):
             session["terminated"] = False
             session["messages"].clear()
@@ -83,19 +88,16 @@ async def honeypot_message(
                 "suspiciousKeywords": []
             }
 
-        # ---------- Store Message ----------
         session["messages"].append(message_text)
         session["total_messages"] += 1
 
-        # ---------- Detect Scam ----------
         if not session["scam_detected"]:
             session["scam_detected"] = analyze_keywords(message_text, session)
 
-        # ---------- Generate Reply ----------
         reply = get_human_reply(session)
 
-        # ---------- Termination Logic ----------
         if session["scam_detected"] and should_terminate(session):
+
             session["terminated"] = True
             send_final_result(session_id, session)
 
