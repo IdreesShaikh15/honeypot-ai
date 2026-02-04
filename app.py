@@ -46,6 +46,7 @@ async def honeypot_message(
     if payload.processId:
         return {
             "status": "success",
+            "reply":None,
             "processId": payload.processId
         }
 
