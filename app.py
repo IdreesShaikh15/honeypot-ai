@@ -55,12 +55,12 @@ async def honeypot_message(
     verify_api_key(api_key)
 
     try:
-        # ✅ GUVI VALIDATION PING
+        # ✅ GUVI VALIDATION PING (VERY STRICT)
         if payload.processId:
-            return HoneypotResponse(
-                status="success",
-                processId=payload.processId
-            )
+            return {
+                "status": "success",
+                "processId": payload.processId
+            }
 
         session_id = payload.sessionId or "default-session"
         message_text = ""
