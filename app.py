@@ -39,7 +39,7 @@ class HoneypotResponse(BaseModel):
 
 
 # ---------------- ENDPOINT ----------------
-@app.post("/honeypot/message", response_model=HoneypotResponse)
+@app.post("/honeypot/message")
 async def honeypot_message(
     payload: HoneypotRequest,
     api_key: str = Security(api_key_header)
@@ -50,10 +50,10 @@ async def honeypot_message(
 
     # ✅ GUVI VALIDATION PING (CRITICAL — MUST BE FIRST RETURN)
     if payload.processId and payload.message is None:
-        return HoneypotResponse(
-            status="success",
-            processId=payload.processId
-        )
+        return {
+            "status":"success",
+            "processId":payload.processId
+        }
 
     try:
 
