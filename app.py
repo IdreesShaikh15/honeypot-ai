@@ -11,6 +11,7 @@ from conversation.reply_generator import get_human_reply
 
 app = FastAPI()
 
+# ---------------- API KEY ----------------
 API_KEY = "lushlife"
 api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
 
@@ -20,6 +21,7 @@ def verify_api_key(api_key: str = Security(api_key_header)):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
+# ---------------- REQUEST MODELS ----------------
 class MessageModel(BaseModel):
     text: Optional[str] = None
 
@@ -30,52 +32,30 @@ class HoneypotRequest(BaseModel):
     message: Optional[Union[MessageModel, str]] = None
 
 
+# ---------------- ENDPOINT ----------------
 @app.post("/honeypot/message")
 async def honeypot_message(
     payload: HoneypotRequest,
     api_key: str = Security(api_key_header)
 ):
 
+    # AUTH
     verify_api_key(api_key)
 
+    # ⭐⭐⭐ GUVI VALIDATION (FIRST RETURN)
+    if payload.processId:
+        return {
+            "status": "success",
+            "processId": payload.processId
+        }
+
     try:
-
-        # =====================================================
-        # ⭐ GUVI VALIDATION — ALWAYS CALLBACK IF processId EXISTS
-        # =====================================================
-        if payload.processId:
-
-            callback_data = {
-                "messages": [],
-                "total_messages": 0,
-                "scam_detected": False,
-                "terminated": True,
-                "intelligence": {
-                    "upiIds": [],
-                    "phoneNumbers": [],
-                    "phishingLinks": [],
-                    "suspiciousKeywords": []
-                }
-            }
-
-            send_final_result(payload.processId, callback_data)
-
-            return {
-                "status": "success",
-                "processId": payload.processId
-            }
-
-        # =====================================================
-        # NORMAL FLOW
-        # =====================================================
-
         session_id = payload.sessionId or "default-session"
 
+        # Extract message
         message_text = ""
-
         if isinstance(payload.message, MessageModel):
             message_text = payload.message.text or ""
-
         elif isinstance(payload.message, str):
             message_text = payload.message
 
@@ -87,6 +67,7 @@ async def honeypot_message(
 
         session = get_session(session_id)
 
+        # Reset terminated session
         if session.get("terminated"):
             session["terminated"] = False
             session["messages"].clear()
@@ -108,7 +89,6 @@ async def honeypot_message(
         reply = get_human_reply(session)
 
         if session["scam_detected"] and should_terminate(session):
-
             session["terminated"] = True
             send_final_result(session_id, session)
 
@@ -122,9 +102,7 @@ async def honeypot_message(
             "reply": reply
         }
 
-    except Exception as e:
-        print("ERROR:", e)
-
+    except Exception:
         return {
             "status": "success",
             "reply": "Unable to process message."
