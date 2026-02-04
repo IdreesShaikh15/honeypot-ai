@@ -29,6 +29,8 @@ class HoneypotRequest(BaseModel):
     processId: Optional[str] = None
     sessionId: Optional[str] = None
     message: Optional[Union[MessageModel, str]] = None
+    class Config:
+        extra="allow"
 
 
 # ---------- ENDPOINT ----------
@@ -37,7 +39,8 @@ async def honeypot_message(
     payload: HoneypotRequest,
     api_key: str = Security(api_key_header)
 ):
-
+    print("===== GUVI HIT ENDPOINT =====")
+    print("RAW PAYLOAD:", payload)
     verify_api_key(api_key)
 
     # ⭐ GUVI VALIDATION HANDSHAKE
