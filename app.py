@@ -54,7 +54,6 @@ async def honeypot_message(
 
     # ⭐⭐⭐ GUVI VALIDATION (FIRST RETURN)
     if payload.processId:
-        print("✅ Process ID Validation Hit")
         return {
             "status": "success",
             "processId": payload.processId
@@ -110,7 +109,7 @@ async def honeypot_message(
         # -------- Termination logic --------
         if session["scam_detected"] and should_terminate(session):
 
-            print("🚨 Scam detected, terminating session")
+            print("Scam detected, terminating session")
 
             session["terminated"] = True
             send_final_result(session_id, session)
