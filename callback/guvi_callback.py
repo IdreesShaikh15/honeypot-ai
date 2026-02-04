@@ -22,23 +22,17 @@ def send_final_result(session_id: str, session: dict):
 
 
 
-        # ✅ FIXED STRUCTURE
+        # ONLY SEND WHAT GUVI STRICTLY NEEDS
 
         "extractedIntelligence": {
 
-            "upiId": session["intelligence"]["upiIds"],
-
-            "phoneNumbers": session["intelligence"]["phoneNumbers"],
-
-            "phishingLinks": session["intelligence"]["phishingLinks"],
-
-            "suspiciousKeywords": session["intelligence"]["suspiciousKeywords"]
+            "upiId": session["intelligence"]["upiIds"]
 
         },
 
 
 
-        "agentNotes": "Progressive keyword + behavioral honeypot extraction"
+        "agentNotes": "Keyword + behavioral honeypot"
 
     }
 
@@ -46,15 +40,7 @@ def send_final_result(session_id: str, session: dict):
 
     try:
 
-        response = requests.post(
-
-            GUVI_CALLBACK_URL,
-
-            json=payload,
-
-            timeout=5
-
-        )
+        response = requests.post(GUVI_CALLBACK_URL, json=payload, timeout=5)
 
 
 
