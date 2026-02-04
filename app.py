@@ -16,12 +16,12 @@ API_KEY = "lushlife"
 api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
 
 
-def verify_api_key(api_key: str):
+def verify_api_key(api_key: str = Security(api_key_header)):
     if api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
-# ---------------- MODELS ----------------
+# ---------------- REQUEST MODELS ----------------
 class MessageModel(BaseModel):
     text: Optional[str] = None
 
@@ -32,49 +32,67 @@ class HoneypotRequest(BaseModel):
     message: Optional[Union[MessageModel, str]] = None
 
 
-class HoneypotResponse(BaseModel):
-    status: str
-    reply: Optional[str] = None
-    processId: Optional[str] = None
-
-
 # ---------------- ENDPOINT ----------------
 @app.post("/honeypot/message")
 async def honeypot_message(
     payload: HoneypotRequest,
     api_key: str = Security(api_key_header)
 ):
-
-    # ✅ AUTH FIRST
     verify_api_key(api_key)
-
-    # ✅ GUVI VALIDATION PING (CRITICAL — MUST BE FIRST RETURN)
-    if payload.processId:
-        return {
-            "status":"success",
-            "processId":payload.processId
-        }
 
     try:
 
+        # =====================================================
+        # ✅ GUVI VALIDATION PING (CRITICAL - FIXES SPINNER)
+        # =====================================================
+        if payload.processId and payload.message is None:
+
+            dummy_session = {
+                "messages": [],
+                "total_messages": 0,
+                "scam_detected": False,
+                "terminated": True,
+                "intelligence": {
+                    "upiIds": [],
+                    "phoneNumbers": [],
+                    "phishingLinks": [],
+                    "suspiciousKeywords": []
+                }
+            }
+
+            # Send callback so GUVI tester stops waiting
+            send_final_result(payload.processId, dummy_session)
+
+            return {
+                "status": "success",
+                "processId": payload.processId
+            }
+
+        # =====================================================
+        # NORMAL HONEYPOT FLOW
+        # =====================================================
+
         session_id = payload.sessionId or "default-session"
 
-        # Extract message
+        # -------- Extract message --------
         message_text = ""
+
         if isinstance(payload.message, MessageModel):
             message_text = payload.message.text or ""
+
         elif isinstance(payload.message, str):
             message_text = payload.message
 
         if not message_text:
-            return HoneypotResponse(
-                status="success",
-                reply="Could you please repeat that message?"
-            )
+            return {
+                "status": "success",
+                "reply": "Could you please repeat that message?"
+            }
 
+        # -------- Get session --------
         session = get_session(session_id)
 
-        # Reset terminated session
+        # -------- Reset terminated session --------
         if session.get("terminated"):
             session["terminated"] = False
             session["messages"].clear()
@@ -87,30 +105,37 @@ async def honeypot_message(
                 "suspiciousKeywords": []
             }
 
+        # -------- Store message --------
         session["messages"].append(message_text)
         session["total_messages"] += 1
 
+        # -------- Scam detection --------
         if not session["scam_detected"]:
             session["scam_detected"] = analyze_keywords(message_text, session)
 
+        # -------- Generate reply --------
         reply = get_human_reply(session)
 
+        # -------- Termination check --------
         if session["scam_detected"] and should_terminate(session):
+
             session["terminated"] = True
             send_final_result(session_id, session)
 
-            return HoneypotResponse(
-                status="success",
-                reply="I will check this and get back to you. Thank you."
-            )
+            return {
+                "status": "success",
+                "reply": "I will check this and get back to you. Thank you."
+            }
 
-        return HoneypotResponse(
-            status="success",
-            reply=reply
-        )
+        return {
+            "status": "success",
+            "reply": reply
+        }
 
-    except Exception:
-        return HoneypotResponse(
-            status="success",
-            reply="Unable to process message."
-        )
+    except Exception as e:
+        print("ERROR:", e)
+
+        return {
+            "status": "success",
+            "reply": "Unable to process message."
+        }
