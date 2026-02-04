@@ -43,10 +43,9 @@ async def honeypot_message(
     verify_api_key(api_key)
 
     # ⭐⭐⭐ GUVI VALIDATION (FIRST RETURN)
-    if payload.processId:
+    if payload.processId and payload.message is None:
         return {
             "status": "success",
-            "reply":None,
             "processId": payload.processId
         }
 
