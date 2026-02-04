@@ -9,24 +9,19 @@ from termination.termination_logic import should_terminate
 from callback.guvi_callback import send_final_result
 from conversation.reply_generator import get_human_reply
 
-
 app = FastAPI()
 
-
 # ---------------- API KEY ----------------
-
 API_KEY = "lushlife"
-
 api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
 
 
-def verify_api_key(api_key: str = Security(api_key_header)):
+def verify_api_key(api_key: str):
     if api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
-# ---------------- REQUEST MODELS ----------------
-
+# ---------------- MODELS ----------------
 class MessageModel(BaseModel):
     text: Optional[str] = None
 
@@ -37,8 +32,6 @@ class HoneypotRequest(BaseModel):
     message: Optional[Union[MessageModel, str]] = None
 
 
-# ---------------- RESPONSE MODEL ----------------
-
 class HoneypotResponse(BaseModel):
     status: str
     reply: Optional[str] = None
@@ -46,25 +39,28 @@ class HoneypotResponse(BaseModel):
 
 
 # ---------------- ENDPOINT ----------------
-
 @app.post("/honeypot/message", response_model=HoneypotResponse)
 async def honeypot_message(
     payload: HoneypotRequest,
     api_key: str = Security(api_key_header)
 ):
+
+    # ✅ AUTH FIRST
     verify_api_key(api_key)
 
+    # ✅ GUVI VALIDATION PING (CRITICAL — MUST BE FIRST RETURN)
+    if payload.processId and payload.message is None:
+        return HoneypotResponse(
+            status="success",
+            processId=payload.processId
+        )
+
     try:
-        # ✅ GUVI VALIDATION PING (VERY STRICT)
-        if payload.processId:
-            return {
-                "status": "success",
-                "processId": payload.processId
-            }
 
         session_id = payload.sessionId or "default-session"
-        message_text = ""
 
+        # Extract message
+        message_text = ""
         if isinstance(payload.message, MessageModel):
             message_text = payload.message.text or ""
         elif isinstance(payload.message, str):
