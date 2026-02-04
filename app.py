@@ -49,7 +49,7 @@ async def honeypot_message(
     verify_api_key(api_key)
 
     # ✅ GUVI VALIDATION PING (CRITICAL — MUST BE FIRST RETURN)
-    if payload.processId and payload.message is None:
+    if payload.processId:
         return {
             "status":"success",
             "processId":payload.processId
