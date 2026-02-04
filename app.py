@@ -11,6 +11,10 @@ from conversation.reply_generator import get_human_reply
 
 app = FastAPI()
 
+@app.get("/honeypot/message")
+async def honeypot_health_check():
+    return {"status":"alive"}
+
 API_KEY = "lushlife"
 api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
 
