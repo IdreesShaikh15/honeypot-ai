@@ -22,26 +22,27 @@ def verify_api_key(api_key: str = Security(api_key_header)):
 
 @app.post("/honeypot/message")
 async def honeypot_message(request: Request, _: str = Depends(verify_api_key)):
-
     try:
         payload = await request.json()
 
+        # ✅ GUVI VALIDATION CHECK (VERY IMPORTANT)
         if "processId" in payload:
             return {
                 "status": "success",
-                "reply": "Hello, how can I help you today?",
                 "processId": payload["processId"]
             }
 
+        # -------- NORMAL FLOW --------
+
         session_id = payload.get("sessionId", "default-session")
 
+        message_block = payload.get("message", {})
         message_text = ""
 
-        if isinstance(payload.get("message"), dict):
-            message_text = payload.get("message", {}).get("text", "")
-
-        elif isinstance(payload.get("message"), str):
-            message_text = payload.get("message")
+        if isinstance(message_block, dict):
+            message_text = message_block.get("text", "")
+        elif isinstance(message_block, str):
+            message_text = message_block
 
         if not message_text:
             return {
@@ -51,6 +52,7 @@ async def honeypot_message(request: Request, _: str = Depends(verify_api_key)):
 
         session = get_session(session_id)
 
+        # Reset terminated session
         if session.get("terminated"):
             session["terminated"] = False
             session["messages"].clear()
@@ -72,7 +74,6 @@ async def honeypot_message(request: Request, _: str = Depends(verify_api_key)):
         reply = get_human_reply(session)
 
         if session["scam_detected"] and should_terminate(session):
-
             session["terminated"] = True
             send_final_result(session_id, session)
 
